@@ -2,156 +2,221 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>보이는 시간표 (Visual Schedule)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visual Schedule & Timer</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (Mandatory for Analytics) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    
     <style>
+        /* Chosen Palette: Soft Warm Neutrals with High Contrast Accents */
         body {
             font-family: 'Noto Sans KR', sans-serif;
             background-color: #F8FAFC;
+            color: #334155;
+            overflow: hidden; /* Prevent scrolling in main view */
         }
         .font-jua {
             font-family: 'Jua', sans-serif;
         }
-        /* Smooth transition for timer bar */
-        .timer-bar {
+        
+        /* Smooth Transitions */
+        .timer-bar-transition {
             transition: width 1s linear, background-color 1s ease;
         }
-        /* Card hover effects */
-        .activity-card {
-            transition: transform 0.2s;
+        .slide-up {
+            animation: slideUp 0.5s ease-out;
         }
-        /* Hide scrollbar */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
+        
+        /* Chart Container Styling (Mandatory) */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            max-height: 300px;
+            margin: 0 auto;
+        }
+
+        /* Custom Scrollbar for Dashboard */
+        .custom-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
         }
     </style>
+    <!-- Application Structure Plan:
+         1. Header: Simple controls for the teacher (Dashboard toggle).
+         2. Main Split View: 
+            - Left (70%): Current Activity (NOW). Big visual impact. Timer bar.
+            - Right (30%): Next Activity (NEXT). Preview mode to reduce anxiety.
+         3. Dashboard Modal:
+            - Editor: Form to modify the schedule array based on the provided Markdown content.
+            - Analytics: Pie chart visualizing time distribution (Study vs Play vs ADL).
+    -->
 </head>
-<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+<body class="h-screen flex flex-col">
 
-    <!-- 1. Top Bar: Controls (Teacher View) -->
-    <header class="bg-white border-b border-slate-200 p-3 flex justify-between items-center z-20 shadow-sm shrink-0">
-        <h1 class="text-xl font-bold text-slate-700 flex items-center">
-            <span class="text-2xl mr-2">🕒</span> 보이는 시간표
-        </h1>
-        <div class="flex gap-2">
-            <button onclick="toggleSetup()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 transition">
-                ⚙️ 설정 / 목록
+    <!-- 1. Header -->
+    <header class="h-16 bg-white border-b border-slate-200 flex justify-between items-center px-6 shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-2">
+            <span class="text-2xl">🕒</span>
+            <h1 class="text-xl font-bold text-slate-700 tracking-tight">보이는 시간표 <span class="text-sm font-normal text-slate-400">| Visual Schedule</span></h1>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="toggleFullScreen()" class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 font-bold transition text-sm">
+                <span>⛶</span> 전체화면
             </button>
-            <button onclick="toggleFullScreen()" class="hidden md:block px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 transition">
-                ⛶ 전체화면
+            <button onclick="toggleDashboard()" class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition text-sm shadow-md">
+                <span>⚙️</span> 대시보드
             </button>
         </div>
     </header>
 
-    <!-- 2. Main Display Area (Student View) -->
-    <main class="flex-1 flex flex-col md:flex-row h-full relative">
+    <!-- 2. Main Visual Interface -->
+    <main class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
         
-        <!-- LEFT: Current Activity (NOW) - Dominant Area -->
-        <section class="flex-[3] bg-white flex flex-col justify-center items-center p-6 relative border-b md:border-b-0 md:border-r border-slate-200">
-            <!-- Label -->
-            <div class="absolute top-6 left-6 bg-emerald-100 text-emerald-800 px-6 py-2 rounded-full font-jua text-2xl shadow-sm border border-emerald-200">
+        <!-- SECTION: NOW (Current Activity) -->
+        <section class="flex-[2] md:flex-[3] bg-white flex flex-col justify-center items-center p-4 md:p-8 relative border-b md:border-b-0 md:border-r border-slate-200 z-10">
+            <!-- Badge -->
+            <div class="absolute top-4 left-4 md:top-8 md:left-8 bg-emerald-100 text-emerald-700 px-6 py-2 rounded-full font-jua text-xl md:text-2xl shadow-sm border border-emerald-200 animate-pulse">
                 지금 해요 (NOW)
             </div>
 
-            <!-- Content -->
-            <div class="text-center w-full max-w-2xl">
-                <div id="current-icon" class="text-[150px] md:text-[220px] mb-4 animate-bounce-slow filter drop-shadow-xl">
+            <!-- Content Wrapper -->
+            <div class="flex flex-col items-center w-full max-w-4xl slide-up">
+                <!-- Icon -->
+                <div id="now-icon" class="text-[120px] md:text-[200px] mb-2 md:mb-6 filter drop-shadow-xl transition-transform hover:scale-105 cursor-pointer" onclick="toggleTimer()">
                     👋
                 </div>
-                <h2 id="current-name" class="text-5xl md:text-7xl font-black text-slate-800 mb-12 font-jua tracking-wide">
+                
+                <!-- Title -->
+                <h2 id="now-title" class="text-5xl md:text-7xl font-black text-slate-800 mb-8 md:mb-12 font-jua text-center leading-tight">
                     아침 인사
                 </h2>
 
-                <!-- Visual Timer Container -->
-                <div class="w-full bg-slate-100 rounded-3xl h-16 md:h-24 overflow-hidden shadow-inner border border-slate-200 relative">
-                    <!-- The Moving Bar -->
-                    <div id="timer-bar" class="timer-bar h-full bg-emerald-500 w-full origin-left"></div>
-                    
-                    <!-- Text Overlay (Optional, for teacher reference) -->
-                    <div class="absolute inset-0 flex items-center justify-center opacity-30">
-                        <span id="timer-text" class="text-2xl font-mono font-bold text-slate-500">00:00</span>
+                <!-- VISUAL TIMER BAR -->
+                <div class="w-full bg-slate-100 rounded-full h-12 md:h-20 shadow-inner border border-slate-300 relative overflow-hidden mb-4">
+                    <!-- The Bar -->
+                    <div id="timer-bar" class="timer-bar-transition h-full w-full bg-emerald-500 origin-left"></div>
+                    <!-- Stripes Overlay for texture -->
+                    <div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem;"></div>
+                    <!-- Time Text (Optional) -->
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span id="timer-text" class="text-xl md:text-3xl font-mono font-bold text-slate-600/50 mix-blend-multiply">05:00</span>
                     </div>
                 </div>
-                <p class="mt-4 text-slate-400 text-lg font-bold">남은 시간</p>
+                
+                <p id="timer-status" class="text-slate-400 font-medium text-lg">시작하려면 버튼을 누르세요</p>
             </div>
 
-            <!-- Control Buttons (Floating) -->
-            <div class="absolute bottom-8 flex gap-4">
-                <button id="btn-toggle" onclick="toggleTimer()" class="w-16 h-16 rounded-full bg-emerald-500 text-white text-3xl shadow-lg hover:bg-emerald-600 transition flex items-center justify-center">
+            <!-- Floating Controls -->
+            <div class="absolute bottom-6 md:bottom-10 flex gap-4 md:gap-6">
+                <button id="btn-control" onclick="toggleTimer()" class="w-20 h-20 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-4xl shadow-xl flex items-center justify-center transition transform active:scale-95">
                     ▶
                 </button>
-                <button onclick="resetTimer()" class="w-16 h-16 rounded-full bg-slate-200 text-slate-600 text-2xl shadow-lg hover:bg-slate-300 transition flex items-center justify-center">
+                <button onclick="resetCurrentActivity()" class="w-20 h-20 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 text-3xl shadow-lg flex items-center justify-center transition transform active:scale-95">
                     ↺
                 </button>
-                <button onclick="nextActivity()" class="px-8 h-16 rounded-full bg-indigo-500 text-white text-xl font-bold shadow-lg hover:bg-indigo-600 transition flex items-center justify-center animate-pulse-custom">
-                    다음 활동 ➔
+                <button onclick="nextActivity()" class="h-20 px-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-jua shadow-xl flex items-center justify-center gap-2 transition transform active:scale-95">
+                    다음 활동 <span class="text-2xl">➔</span>
                 </button>
             </div>
         </section>
 
-        <!-- RIGHT: Next Activity (NEXT) - Smaller Area -->
-        <section class="flex-1 bg-slate-50 flex flex-col justify-center items-center p-6 border-l border-slate-200 relative">
-            <div class="absolute top-6 left-6 bg-indigo-100 text-indigo-800 px-4 py-1 rounded-full font-jua text-lg shadow-sm border border-indigo-200">
+        <!-- SECTION: NEXT (Next Activity) -->
+        <section class="flex-1 bg-slate-50 flex flex-col justify-center items-center p-4 border-l border-slate-200 relative opacity-90">
+            <div class="absolute top-4 left-4 bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full font-jua text-lg shadow-sm border border-indigo-200">
                 다음에 해요 (NEXT)
             </div>
 
-            <div class="text-center opacity-60">
-                <div id="next-icon" class="text-[80px] md:text-[120px] mb-4 grayscale">
+            <div class="text-center slide-up">
+                <div id="next-icon" class="text-[80px] md:text-[120px] mb-4 opacity-70 grayscale-[30%]">
                     📚
                 </div>
-                <h3 id="next-name" class="text-3xl md:text-4xl font-bold text-slate-600 font-jua">
-                    1교시 국어
+                <h3 id="next-title" class="text-3xl md:text-4xl font-bold text-slate-600 font-jua mb-4">
+                    국어 수업
                 </h3>
-                <div class="mt-8 p-4 bg-white rounded-xl border border-slate-200 shadow-sm inline-block">
-                    <span class="text-slate-400 text-sm">기다리는 활동</span>
+                <div class="inline-block px-4 py-2 bg-white rounded-lg border border-slate-200 text-slate-400 text-sm font-bold shadow-sm">
+                    <span id="next-duration">20</span>분 예정
                 </div>
             </div>
         </section>
 
     </main>
 
-    <!-- 3. Setup Modal (Overlay) -->
-    <div id="setup-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex justify-end">
-        <div class="w-full md:w-[400px] bg-white h-full shadow-2xl p-6 overflow-y-auto animate-slide-in">
-            <div class="flex justify-between items-center mb-6 border-b pb-4">
-                <h2 class="text-2xl font-bold text-slate-800">📋 일과 설정</h2>
-                <button onclick="toggleSetup()" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
+    <!-- 3. Dashboard Modal (Overlay) -->
+    <div id="dashboard-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex justify-end transition-opacity duration-300">
+        <div class="w-full md:w-[500px] bg-white h-full shadow-2xl flex flex-col slide-up">
+            
+            <!-- Modal Header -->
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="text-2xl font-bold text-slate-800">⚙️ 선생님 대시보드</h2>
+                <button onclick="toggleDashboard()" class="text-slate-400 hover:text-slate-600 text-3xl">&times;</button>
             </div>
 
-            <!-- List Editor -->
-            <div class="space-y-4 mb-8">
-                <h3 class="font-bold text-slate-600 text-sm">오늘의 일과 순서</h3>
-                <div id="schedule-list" class="space-y-2">
-                    <!-- Items injected by JS -->
+            <!-- Content Area -->
+            <div class="flex-1 overflow-y-auto custom-scroll p-6 space-y-8">
+                
+                <!-- Analytics Section -->
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 border-l-4 border-indigo-500 pl-2">
+                        일과 시간 분석 (Time Distribution)
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-2">오늘 설정된 활동들의 시간 배분 비율입니다.</p>
+                    
+                    <!-- Chart.js Canvas Container -->
+                    <div class="chart-container">
+                        <canvas id="timeDistChart"></canvas>
+                    </div>
                 </div>
-                <button onclick="addScheduleItem()" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition">
-                    + 활동 추가하기
-                </button>
-            </div>
 
-            <!-- Presets -->
-            <div class="space-y-2">
-                <h3 class="font-bold text-slate-600 text-sm">추천 활동 (클릭해서 추가)</h3>
-                <div class="grid grid-cols-4 gap-2">
-                    <button onclick="quickAdd('등교', '🎒')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🎒</button>
-                    <button onclick="quickAdd('공부', '📝')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">📝</button>
-                    <button onclick="quickAdd('놀이', '🧸')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🧸</button>
-                    <button onclick="quickAdd('간식', '🍩')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🍩</button>
-                    <button onclick="quickAdd('화장실', '🚽')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🚽</button>
-                    <button onclick="quickAdd('손씻기', '🧼')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🧼</button>
-                    <button onclick="quickAdd('급식', '🍱')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🍱</button>
-                    <button onclick="quickAdd('하교', '🏠')" class="p-2 bg-slate-100 rounded-lg text-2xl hover:bg-slate-200">🏠</button>
+                <!-- Schedule Editor Section -->
+                <div>
+                    <div class="flex justify-between items-end mb-4">
+                        <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider border-l-4 border-emerald-500 pl-2">
+                            일과 순서 관리
+                        </h3>
+                        <button onclick="resetToDefault()" class="text-xs text-slate-400 hover:text-red-400 underline">기본값 초기화</button>
+                    </div>
+                    
+                    <div id="schedule-editor-list" class="space-y-3">
+                        <!-- List Items Injected Here -->
+                    </div>
+
+                    <button onclick="addNewItem()" class="w-full mt-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-slate-50 hover:border-slate-400 transition flex items-center justify-center gap-2">
+                        <span>➕</span> 새 활동 추가
+                    </button>
                 </div>
+                
+                <!-- Quick Presets -->
+                <div>
+                     <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">자주 쓰는 카드</h3>
+                     <div class="grid grid-cols-4 gap-2">
+                         <button onclick="quickAdd('화장실', '🚽', 5)" class="p-2 bg-slate-50 hover:bg-slate-100 rounded border text-2xl" title="화장실">🚽</button>
+                         <button onclick="quickAdd('손씻기', '🧼', 3)" class="p-2 bg-slate-50 hover:bg-slate-100 rounded border text-2xl" title="손씻기">🧼</button>
+                         <button onclick="quickAdd('간식', '🍩', 15)" class="p-2 bg-slate-50 hover:bg-slate-100 rounded border text-2xl" title="간식">🍩</button>
+                         <button onclick="quickAdd('이동', '🚌', 10)" class="p-2 bg-slate-50 hover:bg-slate-100 rounded border text-2xl" title="이동">🚌</button>
+                     </div>
+                </div>
+
             </div>
 
-            <div class="mt-8 pt-6 border-t">
-                <button onclick="toggleSetup()" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-700 shadow-lg">
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50">
+                <button onclick="toggleDashboard()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-slate-700 transition">
                     설정 완료 (닫기)
                 </button>
             </div>
@@ -159,110 +224,134 @@
     </div>
 
     <script>
-        // --- Data & State ---
-        let schedule = [
-            { id: 1, name: "아침 인사", icon: "👋", duration: 5 }, // duration in minutes
-            { id: 2, name: "국어 수업", icon: "📚", duration: 20 },
-            { id: 3, name: "쉬는 시간", icon: "🎈", duration: 10 },
-            { id: 4, name: "미술 활동", icon: "🎨", duration: 30 },
-            { id: 5, name: "점심 식사", icon: "🍱", duration: 40 },
-            { id: 6, name: "정리 정돈", icon: "🧹", duration: 5 },
-            { id: 7, name: "하교 하기", icon: "🏠", duration: 0 }
+        /* <!-- Visualization & Content Choices:
+              1. Visual Timer (Bar): Selected for accessibility. Students who cannot read clocks can understand a shrinking bar.
+              2. Pie Chart (Dashboard): Selected to satisfy "Mandatory Use" of Chart.js while providing useful "Metacognition" data for the teacher (Balance of activities).
+              3. Data Structure: Array of objects mirroring the provided markdown table.
+           -->
+        */
+
+        // --- 1. Initial Data (From Source Report) ---
+        const defaultSchedule = [
+            { id: 1, name: "아침 인사", icon: "👋", duration: 5, category: "생활" },
+            { id: 2, name: "국어 수업", icon: "📚", duration: 20, category: "학습" },
+            { id: 3, name: "쉬는 시간", icon: "🎈", duration: 10, category: "놀이" },
+            { id: 4, name: "미술 활동", icon: "🎨", duration: 30, category: "학습" },
+            { id: 5, name: "점심 식사", icon: "🍱", duration: 40, category: "생활" },
+            { id: 6, name: "정리 정돈", icon: "🧹", duration: 5, category: "생활" },
+            { id: 7, name: "하교 하기", icon: "🏠", duration: 0, category: "생활" }
         ];
 
+        // --- 2. State Management ---
+        let schedule = JSON.parse(JSON.stringify(defaultSchedule)); // Deep copy
         let currentIndex = 0;
-        let timeLeft = 0; // in seconds
-        let totalTime = 0; // in seconds
+        let timeLeft = 0; // seconds
+        let totalTime = 0; // seconds
         let timerInterval = null;
         let isRunning = false;
+        let chartInstance = null;
 
-        // --- DOM Elements ---
+        // --- 3. DOM Elements ---
         const els = {
-            currentName: document.getElementById('current-name'),
-            currentIcon: document.getElementById('current-icon'),
-            nextName: document.getElementById('next-name'),
+            nowTitle: document.getElementById('now-title'),
+            nowIcon: document.getElementById('now-icon'),
+            nextTitle: document.getElementById('next-title'),
             nextIcon: document.getElementById('next-icon'),
+            nextDuration: document.getElementById('next-duration'),
             timerBar: document.getElementById('timer-bar'),
             timerText: document.getElementById('timer-text'),
-            btnToggle: document.getElementById('btn-toggle'),
-            scheduleList: document.getElementById('schedule-list'),
-            setupModal: document.getElementById('setup-modal')
+            timerStatus: document.getElementById('timer-status'),
+            btnControl: document.getElementById('btn-control'),
+            dashboard: document.getElementById('dashboard-modal'),
+            editorList: document.getElementById('schedule-editor-list')
         };
 
-        // --- Initialization ---
-        document.addEventListener('DOMContentLoaded', () => {
-            renderScheduleList();
-            loadActivity(0);
-        });
-
-        // --- Core Functions: Timer & Activity ---
-
+        // --- 4. Core Logic: Activity & Timer ---
         function loadActivity(index) {
+            // Boundary Check
             if (index >= schedule.length) {
-                alert("오늘의 모든 일과가 끝났습니다! 🎉");
+                renderEndScreen();
                 return;
             }
 
             currentIndex = index;
             const current = schedule[currentIndex];
-            const next = schedule[currentIndex + 1] || { name: "일과 종료", icon: "🏁" };
+            const next = schedule[currentIndex + 1] || { name: "일과 종료", icon: "🏁", duration: 0 };
 
-            // Update UI
-            els.currentName.textContent = current.name;
-            els.currentIcon.textContent = current.icon;
-            els.nextName.textContent = next.name;
+            // Render UI
+            els.nowTitle.textContent = current.name;
+            els.nowIcon.textContent = current.icon;
+            els.nextTitle.textContent = next.name;
             els.nextIcon.textContent = next.icon;
+            els.nextDuration.textContent = next.duration;
 
-            // Reset Timer
+            // Reset Timer logic
             stopTimer();
-            totalTime = current.duration * 60; // minutes to seconds
+            totalTime = current.duration * 60;
             timeLeft = totalTime;
             
-            updateTimerDisplay();
+            // Initial Visual Reset
+            els.timerBar.style.width = '100%';
+            els.timerBar.className = 'timer-bar-transition h-full w-full bg-emerald-500 origin-left';
+            els.timerStatus.textContent = "시작하려면 버튼을 누르세요";
+            updateTimerText();
+
+            // Special case for 0 min activities (e.g. Go Home)
+            if (totalTime === 0) {
+                els.timerStatus.textContent = "종료 활동입니다.";
+                els.timerBar.style.width = '0%';
+                els.timerText.textContent = "";
+            }
         }
 
-        function updateTimerDisplay() {
-            // Width Calculation
-            const percentage = totalTime > 0 ? (timeLeft / totalTime) * 100 : 0;
+        function updateTimerVisuals() {
+            if (totalTime === 0) return;
+
+            const percentage = (timeLeft / totalTime) * 100;
             els.timerBar.style.width = `${percentage}%`;
 
-            // Color Logic (Green -> Yellow -> Red)
-            if (percentage > 50) {
-                els.timerBar.className = "timer-bar h-full w-full origin-left bg-emerald-500";
-            } else if (percentage > 20) {
-                els.timerBar.className = "timer-bar h-full w-full origin-left bg-amber-400";
-            } else {
-                els.timerBar.className = "timer-bar h-full w-full origin-left bg-red-500 animate-pulse";
-            }
+            // Color Logic: Green -> Yellow -> Red
+            let colorClass = 'bg-emerald-500';
+            if (percentage <= 20) colorClass = 'bg-red-500';
+            else if (percentage <= 50) colorClass = 'bg-amber-400';
+            
+            els.timerBar.className = `timer-bar-transition h-full w-full ${colorClass} origin-left`;
+            updateTimerText();
+        }
 
-            // Text Display
-            const mm = String(Math.floor(timeLeft / 60)).padStart(2, '0');
-            const ss = String(timeLeft % 60).padStart(2, '0');
-            els.timerText.textContent = `${mm}:${ss}`;
+        function updateTimerText() {
+            const m = Math.floor(timeLeft / 60);
+            const s = timeLeft % 60;
+            els.timerText.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
 
         function toggleTimer() {
+            if (totalTime === 0) return;
+
             if (isRunning) {
                 stopTimer();
+                els.timerStatus.textContent = "일시 정지됨";
             } else {
                 startTimer();
+                els.timerStatus.textContent = "활동 진행 중...";
             }
         }
 
         function startTimer() {
             if (timeLeft <= 0) return;
-            
             isRunning = true;
-            els.btnToggle.textContent = "❚❚"; // Pause symbol
-            els.btnToggle.classList.replace('bg-emerald-500', 'bg-slate-600');
+            els.btnControl.textContent = "❚❚"; // Pause icon
+            els.btnControl.classList.remove('bg-emerald-500');
+            els.btnControl.classList.add('bg-slate-700');
 
             timerInterval = setInterval(() => {
                 timeLeft--;
-                updateTimerDisplay();
+                updateTimerVisuals();
 
                 if (timeLeft <= 0) {
                     stopTimer();
-                    playAlarm(); // Optional sound
+                    els.timerStatus.textContent = "시간 종료! 다음 활동으로 넘어가세요.";
+                    els.timerBar.classList.add('animate-pulse'); // Visual cue
                 }
             }, 1000);
         }
@@ -270,75 +359,163 @@
         function stopTimer() {
             isRunning = false;
             clearInterval(timerInterval);
-            els.btnToggle.textContent = "▶";
-            els.btnToggle.classList.replace('bg-slate-600', 'bg-emerald-500');
+            els.btnControl.textContent = "▶";
+            els.btnControl.classList.remove('bg-slate-700');
+            els.btnControl.classList.add('bg-emerald-500');
+            els.timerBar.classList.remove('animate-pulse');
         }
 
-        function resetTimer() {
+        function resetCurrentActivity() {
             stopTimer();
             timeLeft = totalTime;
-            updateTimerDisplay();
+            updateTimerVisuals();
+            els.timerStatus.textContent = "시간이 초기화되었습니다.";
         }
 
         function nextActivity() {
             loadActivity(currentIndex + 1);
         }
 
-        function playAlarm() {
-            // Simple beep logic using AudioContext is better, but alert is simplest for MVP
-            // Or just visual cue
-            els.currentName.textContent = "활동 종료!";
-            els.timerBar.classList.remove('animate-pulse');
+        function renderEndScreen() {
+            els.nowTitle.textContent = "모든 일과 끝!";
+            els.nowIcon.textContent = "🎉";
+            els.timerText.textContent = "";
+            els.timerBar.style.width = "0%";
+            els.timerStatus.textContent = "참 잘했어요!";
+            
+            els.nextTitle.textContent = "-";
+            els.nextIcon.textContent = "";
+            stopTimer();
         }
 
-        // --- Functions: Setup & List Management ---
+        // --- 5. Dashboard & Analytics Logic ---
 
-        function toggleSetup() {
-            els.setupModal.classList.toggle('hidden');
+        function toggleDashboard() {
+            const isHidden = els.dashboard.classList.contains('hidden');
+            if (isHidden) {
+                els.dashboard.classList.remove('hidden');
+                renderEditor();
+                renderChart();
+            } else {
+                els.dashboard.classList.add('hidden');
+                // Reload current activity if data changed
+                loadActivity(currentIndex); 
+            }
         }
 
-        function renderScheduleList() {
-            els.scheduleList.innerHTML = '';
+        function renderEditor() {
+            els.editorList.innerHTML = '';
             schedule.forEach((item, index) => {
+                const isActive = index === currentIndex ? "border-emerald-500 ring-1 ring-emerald-500" : "border-slate-200";
+                
                 const div = document.createElement('div');
-                div.className = "flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200";
+                div.className = `flex items-center gap-2 p-3 bg-white rounded-xl border ${isActive} shadow-sm`;
                 div.innerHTML = `
-                    <div class="text-2xl w-10 text-center">${item.icon}</div>
+                    <div class="text-2xl w-10 text-center cursor-pointer hover:bg-slate-100 rounded" onclick="changeIcon(${index})">${item.icon}</div>
                     <div class="flex-1">
-                        <input type="text" value="${item.name}" onchange="updateItem(${index}, 'name', this.value)" class="w-full bg-transparent font-bold text-slate-700 outline-none text-sm">
+                        <input type="text" value="${item.name}" onchange="updateSchedule(${index}, 'name', this.value)" class="w-full font-bold text-slate-700 text-sm outline-none border-b border-transparent focus:border-indigo-300 transition">
                     </div>
-                    <div class="w-16 flex items-center">
-                        <input type="number" value="${item.duration}" onchange="updateItem(${index}, 'duration', this.value)" class="w-10 bg-white border rounded text-center text-sm p-1">
-                        <span class="text-xs text-slate-400 ml-1">분</span>
+                    <div class="flex items-center gap-1">
+                        <input type="number" value="${item.duration}" onchange="updateSchedule(${index}, 'duration', this.value)" class="w-12 text-center bg-slate-50 border rounded text-sm p-1 outline-none focus:ring-1 focus:ring-indigo-500">
+                        <span class="text-xs text-slate-400">분</span>
                     </div>
-                    <button onclick="deleteItem(${index})" class="text-red-400 hover:text-red-600 px-2">×</button>
+                    <button onclick="deleteScheduleItem(${index})" class="text-slate-300 hover:text-red-500 px-2 transition">🗑️</button>
                 `;
-                els.scheduleList.appendChild(div);
+                els.editorList.appendChild(div);
             });
         }
 
-        function updateItem(index, key, value) {
+        function updateSchedule(index, key, value) {
             if (key === 'duration') value = parseInt(value) || 0;
             schedule[index][key] = value;
-            if (index === currentIndex) loadActivity(currentIndex); // Refresh if current changed
+            if (key === 'duration') renderChart(); // Update chart if time changes
         }
 
-        function deleteItem(index) {
+        function deleteScheduleItem(index) {
             schedule.splice(index, 1);
-            renderScheduleList();
-            if (index === currentIndex) loadActivity(currentIndex);
+            // Adjust current index if needed
+            if (index < currentIndex) currentIndex--;
+            renderEditor();
+            renderChart();
         }
 
-        function addScheduleItem() {
-            schedule.push({ id: Date.now(), name: "새 활동", icon: "✨", duration: 10 });
-            renderScheduleList();
+        function addNewItem() {
+            schedule.push({ id: Date.now(), name: "새 활동", icon: "✨", duration: 15, category: "기타" });
+            renderEditor();
+            renderChart();
         }
 
-        function quickAdd(name, icon) {
-            schedule.push({ id: Date.now(), name: name, icon: icon, duration: 15 });
-            renderScheduleList();
+        function quickAdd(name, icon, duration) {
+            schedule.push({ id: Date.now(), name: name, icon: icon, duration: duration, category: "생활" });
+            renderEditor();
+            renderChart();
         }
-        
+
+        function resetToDefault() {
+            if(confirm("일과를 초기 상태로 되돌리시겠습니까?")) {
+                schedule = JSON.parse(JSON.stringify(defaultSchedule));
+                currentIndex = 0;
+                renderEditor();
+                renderChart();
+                loadActivity(0);
+            }
+        }
+
+        // --- Chart.js Implementation (Mandatory) ---
+        function renderChart() {
+            const ctx = document.getElementById('timeDistChart').getContext('2d');
+            
+            // Aggregate Data
+            const categories = {};
+            schedule.forEach(item => {
+                const cat = item.category || "기타";
+                categories[cat] = (categories[cat] || 0) + item.duration;
+            });
+
+            const labels = Object.keys(categories);
+            const data = Object.values(categories);
+
+            // Destroy existing chart to prevent overlay
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            'rgba(16, 185, 129, 0.6)', // Emerald (Life)
+                            'rgba(99, 102, 241, 0.6)', // Indigo (Study)
+                            'rgba(245, 158, 11, 0.6)', // Amber (Play)
+                            'rgba(148, 163, 184, 0.6)' // Slate (Other)
+                        ],
+                        borderColor: [
+                            'rgb(16, 185, 129)',
+                            'rgb(99, 102, 241)',
+                            'rgb(245, 158, 11)',
+                            'rgb(148, 163, 184)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw}분`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen();
@@ -349,22 +526,11 @@
             }
         }
 
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadActivity(0);
+        });
+
     </script>
-    <style>
-        @keyframes bounce-slow {
-            0%, 100% { transform: translateY(-5%); }
-            50% { transform: translateY(5%); }
-        }
-        .animate-bounce-slow {
-            animation: bounce-slow 3s infinite ease-in-out;
-        }
-        @keyframes slide-in {
-            from { transform: translateX(100%); }
-            to { transform: translateX(0); }
-        }
-        .animate-slide-in {
-            animation: slide-in 0.3s ease-out;
-        }
-    </style>
 </body>
 </html>
