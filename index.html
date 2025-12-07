@@ -45,9 +45,10 @@
             margin: 0 auto;
         }
 
-        /* Custom Scrollbar for Dashboard */
+        /* Custom Scrollbar for Dashboard & Timeline */
         .custom-scroll::-webkit-scrollbar {
             width: 8px;
+            height: 8px; /* For horizontal scroll */
         }
         .custom-scroll::-webkit-scrollbar-track {
             background: #f1f1f1;
@@ -56,21 +57,17 @@
             background: #cbd5e1;
             border-radius: 4px;
         }
+        
+        /* Timeline specific adjustments */
+        #timeline-bar {
+            scroll-behavior: smooth;
+        }
     </style>
-    <!-- Application Structure Plan:
-         1. Header: Simple controls for the teacher (Dashboard toggle).
-         2. Main Split View: 
-            - Left (70%): Current Activity (NOW). Big visual impact. Timer bar.
-            - Right (30%): Next Activity (NEXT). Preview mode to reduce anxiety.
-         3. Dashboard Modal:
-            - Editor: Form to modify the schedule array based on the provided Markdown content.
-            - Analytics: Pie chart visualizing time distribution (Study vs Play vs ADL).
-    -->
 </head>
 <body class="h-screen flex flex-col">
 
     <!-- 1. Header -->
-    <header class="h-16 bg-white border-b border-slate-200 flex justify-between items-center px-6 shrink-0 z-20 shadow-sm">
+    <header class="h-16 bg-white border-b border-slate-200 flex justify-between items-center px-6 shrink-0 z-20 shadow-sm relative">
         <div class="flex items-center gap-2">
             <span class="text-2xl">🕒</span>
             <h1 class="text-xl font-bold text-slate-700 tracking-tight">보이는 시간표 <span class="text-sm font-normal text-slate-400">| Visual Schedule</span></h1>
@@ -84,6 +81,11 @@
             </button>
         </div>
     </header>
+
+    <!-- [NEW] 1.5 Timeline Section -->
+    <nav id="timeline-bar" class="w-full bg-slate-50 border-b border-slate-200 h-24 flex items-center gap-3 px-4 overflow-x-auto shrink-0 custom-scroll z-10 shadow-inner">
+        <!-- Javascript renders cards here -->
+    </nav>
 
     <!-- 2. Main Visual Interface -->
     <main class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
@@ -224,14 +226,7 @@
     </div>
 
     <script>
-        /* <!-- Visualization & Content Choices:
-              1. Visual Timer (Bar): Selected for accessibility. Students who cannot read clocks can understand a shrinking bar.
-              2. Pie Chart (Dashboard): Selected to satisfy "Mandatory Use" of Chart.js while providing useful "Metacognition" data for the teacher (Balance of activities).
-              3. Data Structure: Array of objects mirroring the provided markdown table.
-           -->
-        */
-
-        // --- 1. Initial Data (From Source Report) ---
+        // --- 1. Initial Data ---
         const defaultSchedule = [
             { id: 1, name: "아침 인사", icon: "👋", duration: 5, category: "생활" },
             { id: 2, name: "국어 수업", icon: "📚", duration: 20, category: "학습" },
@@ -263,7 +258,8 @@
             timerStatus: document.getElementById('timer-status'),
             btnControl: document.getElementById('btn-control'),
             dashboard: document.getElementById('dashboard-modal'),
-            editorList: document.getElementById('schedule-editor-list')
+            editorList: document.getElementById('schedule-editor-list'),
+            timeline: document.getElementById('timeline-bar') // [NEW] Timeline Element
         };
 
         // --- 4. Core Logic: Activity & Timer ---
@@ -301,6 +297,52 @@
                 els.timerStatus.textContent = "종료 활동입니다.";
                 els.timerBar.style.width = '0%';
                 els.timerText.textContent = "";
+            }
+
+            // Update Timeline Highlight
+            renderTimeline();
+        }
+
+        // [NEW] Render Horizontal Timeline
+        function renderTimeline() {
+            els.timeline.innerHTML = ''; // Clear
+
+            schedule.forEach((item, index) => {
+                const isPast = index < currentIndex;
+                const isCurrent = index === currentIndex;
+                
+                const btn = document.createElement('button');
+                
+                // Styles based on state
+                let baseClass = "flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-xl border transition-all duration-300 snap-start ";
+                let stateClass = "";
+
+                if (isCurrent) {
+                    stateClass = "bg-indigo-600 border-indigo-600 text-white shadow-lg scale-105 ring-2 ring-indigo-200 z-10";
+                } else if (isPast) {
+                    stateClass = "bg-slate-100 border-slate-200 text-slate-300 grayscale opacity-70";
+                } else {
+                    stateClass = "bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-indigo-300";
+                }
+                
+                btn.className = baseClass + stateClass;
+                btn.onclick = () => loadActivity(index); // Jump to activity
+
+                btn.innerHTML = `
+                    <span class="text-2xl mb-1">${item.icon}</span>
+                    <span class="text-[10px] font-bold truncate w-full text-center leading-none">${item.name}</span>
+                `;
+                els.timeline.appendChild(btn);
+            });
+
+            // Auto-scroll to center current item
+            if (schedule[currentIndex]) {
+                const activeEl = els.timeline.children[currentIndex];
+                if (activeEl) {
+                    setTimeout(() => {
+                        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }, 100);
+                }
             }
         }
 
@@ -386,6 +428,7 @@
             els.nextTitle.textContent = "-";
             els.nextIcon.textContent = "";
             stopTimer();
+            renderTimeline(); // Update timeline
         }
 
         // --- 5. Dashboard & Analytics Logic ---
@@ -398,7 +441,6 @@
                 renderChart();
             } else {
                 els.dashboard.classList.add('hidden');
-                // Reload current activity if data changed
                 loadActivity(currentIndex); 
             }
         }
@@ -428,27 +470,30 @@
         function updateSchedule(index, key, value) {
             if (key === 'duration') value = parseInt(value) || 0;
             schedule[index][key] = value;
-            if (key === 'duration') renderChart(); // Update chart if time changes
+            if (key === 'duration') renderChart(); 
+            renderTimeline(); // Update timeline on name change
         }
 
         function deleteScheduleItem(index) {
             schedule.splice(index, 1);
-            // Adjust current index if needed
             if (index < currentIndex) currentIndex--;
             renderEditor();
             renderChart();
+            renderTimeline();
         }
 
         function addNewItem() {
             schedule.push({ id: Date.now(), name: "새 활동", icon: "✨", duration: 15, category: "기타" });
             renderEditor();
             renderChart();
+            renderTimeline();
         }
 
         function quickAdd(name, icon, duration) {
             schedule.push({ id: Date.now(), name: name, icon: icon, duration: duration, category: "생활" });
             renderEditor();
             renderChart();
+            renderTimeline();
         }
 
         function resetToDefault() {
